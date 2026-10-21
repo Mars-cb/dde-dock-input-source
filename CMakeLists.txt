@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-project(dde-dock-input-source VERSION 0.1.2 LANGUAGES CXX)
+project(dde-dock-input-source VERSION 0.1.3 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)

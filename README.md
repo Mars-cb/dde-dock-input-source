@@ -61,6 +61,7 @@ sudo cmake --install build
 
 ```bash
 QT_QPA_PLATFORM=offscreen ./build/input-source-panel --demo --screenshot build/panel-demo.png
+QT_QPA_PLATFORM=offscreen ./build/input-source-panel --demo --popup-screenshot build/popup-demo.png
 QT_QPA_PLATFORM=offscreen ./build/input-source-panel --quit-after 1500
 ```
 
@@ -76,10 +77,10 @@ dpkg-checkbuilddeps
 dpkg-buildpackage -us -uc -b -j4
 ```
 
-安装包生成在项目上一级目录，例如 `../dde-dock-input-source_0.1.2_amd64.deb`。运行依赖由 `dpkg-shlibdeps` 自动生成，包内包含任务栏插件、后台程序、独立调试面板和 AMD AUX 的 udev 规则。
+安装包生成在项目上一级目录，例如 `../dde-dock-input-source_0.1.3_amd64.deb`。运行依赖由 `dpkg-shlibdeps` 自动生成，包内包含任务栏插件、后台程序、独立调试面板和 AMD AUX 的 udev 规则。
 
 ```bash
-sudo apt-get install ../dde-dock-input-source_0.1.2_amd64.deb
+sudo apt-get install ../dde-dock-input-source_0.1.3_amd64.deb
 ```
 
 安装后重新打开任务栏会话以加载新版插件。需要构建源码包时使用 `dpkg-buildpackage -us -uc`；建议从干净的 Git 检出目录构建。

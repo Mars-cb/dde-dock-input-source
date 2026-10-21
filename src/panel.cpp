@@ -1,12 +1,88 @@
 #include "panel.h"
 #include <QCheckBox>
+#include <QApplication>
 #include <QComboBox>
 #include <QFrame>
 #include <QEvent>
 #include <QHBoxLayout>
+#include <QListView>
+#include <QPainter>
+#include <QPointer>
+#include <QStyledItemDelegate>
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QSpinBox>
+
+// A combo popup is a separate window; the dock's translucent panel cannot
+// supply its background, and the default item view fills it with opaque Base.
+class InputSourceComboBox : public QComboBox {
+public:
+    InputSourceComboBox() {
+        // Keep a regular list popup; native menu scrollers paint an opaque base.
+        setStyleSheet(QStringLiteral("QComboBox { combobox-popup: 0; }"));
+        setAutoFillBackground(false);
+        QPalette colors = palette();
+        colors.setColor(QPalette::Base, Qt::transparent);
+        setPalette(colors);
+        auto *list = new QListView;
+        setView(list);
+        // Avoid the platform menu delegate painting an opaque menu per item.
+        setItemDelegate(new QStyledItemDelegate(list));
+        view()->window()->setAttribute(Qt::WA_TranslucentBackground);
+    }
+    void showPopup() override {
+        auto *list = view();
+        auto *popup = list->window();
+        if (m_popup != popup) {
+            m_popup = popup;
+            popup->installEventFilter(this);
+        }
+        popup->setObjectName(QStringLiteral("inputSourceComboPopup"));
+        popup->setAttribute(Qt::WA_TranslucentBackground);
+        popup->setAutoFillBackground(false);
+        list->setAutoFillBackground(false);
+        list->viewport()->setAutoFillBackground(false);
+        list->setFrameShape(QFrame::NoFrame);
+        const auto rgba = [](const QColor &color, int alpha) {
+            return QStringLiteral("rgba(%1, %2, %3, %4)")
+                .arg(color.red()).arg(color.green()).arg(color.blue()).arg(alpha);
+        };
+        // The combo stylesheet tints its own Window role; use the application
+        // surface palette so a light-theme popup does not become black.
+        const QPalette colors = QApplication::palette();
+        m_background = colors.color(QPalette::Window);
+        m_background.setAlpha(210);
+        m_border = colors.color(QPalette::WindowText);
+        m_border.setAlpha(35);
+        const QString selected = rgba(colors.color(QPalette::Highlight), 200);
+        popup->setStyleSheet(QStringLiteral(
+            "QAbstractItemView { background: transparent; border: none; outline: 0; }"
+            "QAbstractItemView::item { background: transparent; min-height: 26px; padding: 3px 8px; border-radius: 4px; }"
+            "QAbstractItemView::item:selected, QAbstractItemView::item:hover { background: %1; color: %2; }"
+        ).arg(selected, colors.color(QPalette::HighlightedText).name()));
+        QComboBox::showPopup();
+        // Polish can enable viewport autofill; disable it again after show.
+        list->setAutoFillBackground(false);
+        list->viewport()->setAutoFillBackground(false);
+    }
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (object == m_popup && event->type() == QEvent::Paint) {
+            // Paint this separate popup surface once. Platform styles otherwise
+            // paint an opaque menu, or omit the background of a frameless popup.
+            QPainter painter(m_popup.data());
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setPen(QPen(m_border, 1));
+            painter.setBrush(m_background);
+            painter.drawRoundedRect(QRectF(m_popup->rect()).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7);
+            return true;
+        }
+        return QComboBox::eventFilter(object, event);
+    }
+private:
+    QPointer<QWidget> m_popup;
+    QColor m_background, m_border;
+};
 
 static QLabel *label(const QString &text, QWidget *parent = nullptr)
 {
@@ -106,7 +182,7 @@ void Panel::rebuild()
         if (m.controllable) {
             const bool manual = m_manual.contains(m.id);
             auto *row = new QHBoxLayout;
-            auto *combo = new QComboBox;
+            auto *combo = new InputSourceComboBox;
             combo->setAccessibleName(m.name + QStringLiteral("的目标输入源"));
             combo->addItem(QStringLiteral("选择输入源…"), -1);
             QVector<int> values = m.sources;

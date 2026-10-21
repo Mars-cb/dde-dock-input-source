@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPluginLoader>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -176,7 +177,11 @@ private slots:
         else qputenv("DDE_INPUT_SOURCE_HELPER", previous);
     }
     void helperRejectsInvalidTarget() {
+        QTemporaryDir runtime; QVERIFY(runtime.isValid());
         QProcess helper;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("XDG_RUNTIME_DIR", runtime.path());
+        helper.setProcessEnvironment(environment);
         helper.start(QCoreApplication::applicationDirPath() + "/dde-dock-input-source-helper",
                      {"set", "-1", "invalid-edid", "256"});
         QVERIFY(helper.waitForFinished(3000));
