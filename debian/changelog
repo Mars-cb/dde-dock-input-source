@@ -1,0 +1,21 @@
+dde-dock-input-source (0.1.2) unstable; urgency=medium
+
+  * Let the dock blur show through the panel and scroll content.
+  * Use palette-aware translucent control and monitor card backgrounds.
+  * Reduce the dock icon to 16 pixels with matching artwork.
+
+ -- Input Source Plugin Contributors <noreply@example.invalid>  Wed, 21 Oct 2026 12:30:30 +0800
+
+dde-dock-input-source (0.1.1) unstable; urgency=medium
+
+  * Select the connector-local DisplayPort AUX adapter on AMD Display Core.
+  * Add active-session udev access for AMD DisplayPort AUX adapters.
+  * Normalize X11 DisplayPort names and avoid the dock legacy filename filter.
+
+ -- Input Source Plugin Contributors <noreply@example.invalid>  Wed, 21 Oct 2026 12:30:00 +0800
+
+dde-dock-input-source (0.1.0) unstable; urgency=medium
+
+  * Initial release with per-monitor DDC/CI input source switching.
+
+ -- Input Source Plugin Contributors <noreply@example.invalid>  Wed, 21 Oct 2026 12:00:00 +0800

@@ -1,0 +1,12 @@
+/build*/
+/.cache/
+*.user
+/compile_commands.json
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/dde-dock-input-source/
+/obj-*/
+/debian/*.debhelper
+/debian/*.debhelper.log

@@ -1,0 +1,3 @@
+# DisplayPort DDC/CI uses AMD Display Core AUX adapters, not SMBus.
+# Grant access through logind only to the active local desktop user.
+ACTION!="remove", SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", ATTR{name}=="AMDGPU DM aux hw bus *", TAG+="uaccess"
