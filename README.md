@@ -1,6 +1,6 @@
 # 显示器输入源任务栏插件
 
-DDE/统信 UOS 任务栏插件。点击任务栏中的显示器图标，在面板中为每个显示器选择 HDMI、DisplayPort、DVI 等输入源并点击「切换」。
+DDE/统信 UOS 任务栏插件。点击任务栏中的显示器图标，在面板中为每个显示器选择 HDMI、DisplayPort、DVI 等输入源，选择后立即切换。
 
 **兼容范围：能够识别屏幕不代表能够切换其输入源。并非每台显示器都支持 DDC/CI；支持 DDC/CI 也不保证实现 VCP `0x60` 输入源控制。本版本仅为支持相应控制且连接链路允许访问的显示器提供切换，其他屏幕显示不可用原因。通用软件无法保证切换所有型号的硬件输入源。**
 
@@ -9,11 +9,12 @@ DDE/统信 UOS 任务栏插件。点击任务栏中的显示器图标，在面�
 - 合并 Linux DRM 已连接显示器、Qt 桌面屏幕与 libddcutil 检测结果；显示名称、接口、序列号和当前输入源。
 - 从显示器 capabilities 的 VCP `0x60` 字段获取可选输入源；不将通用输入源列表冒充实际硬件能力。
 - 内置屏、虚拟屏、DDC/CI 不支持及无权限的显示器保留在列表中，并说明原因。
-- 手动模式支持未报告的常见输入源及自定义十六进制 VCP 值。USB-C 没有通用的输入源编号，必须按显示器资料填写，未知值按 `0xNN` 展示。
+- 下拉列表使用与任务栏相同的 DTK 背景模糊组件，跟随系统主题；模糊效果需要窗口管理器支持。
+- 手动模式支持未报告的常见输入源及自定义十六进制 VCP 值。USB-C 没有通用的输入源编号，必须按显示器资料填写，未知值按 `0xNN` 展示。自定义值输入后按 Enter 切换。
 - 桌面屏幕增删时自动刷新，每次打开面板时重新检测，也支持手动刷新。
 - libddcutil 在独立进程中运行，操作串行，60 秒超时；进程间互斥，避免两个面板同时操作。
 - 每次切换重新检测，并核对 I²C 总线及完整的 128 字节基础 EDID。相同型号或重复 EDID 不按列表顺序猜测。
-- 只有点击「切换」才写入硬件。指令成功发送后不假称验证了画面，不自动重试写入。
+- 默认显示当前输入源，只有用户主动选择其他输入源才写入硬件，初始化和刷新不会触发切换。指令成功发送后不假称验证了画面，不自动重试写入。
 
 输入源切换依赖外接显示器支持 DDC/CI，且在显示器 OSD 菜单中启用。输入源是**显示器自身的硬件输入**，例如将一块显示器从当前电脑的 DP 切至另一台电脑的 HDMI；不是桌面复制/扩展设置。切至其他设备后，此电脑可能失去画面和 DDC 控制，恢复时可能需要使用显示器物理按键。
 
@@ -22,7 +23,7 @@ DDE/统信 UOS 任务栏插件。点击任务栏中的显示器图标，在面�
 目标：提供 `PluginsItemInterface` 1.x 兼容接口的 DDE Dock，Qt 5.11+，C++14，libddcutil 0.9.0+。本项目使用兼容插件元数据 `api: 1.1.1`。新版仅支持 Qt6/QML 接口的任务栏需要另行适配。
 
 ```bash
-sudo apt-get install build-essential cmake pkg-config qtbase5-dev dde-dock-dev libddcutil-dev
+sudo apt-get install build-essential cmake pkg-config qtbase5-dev dde-dock-dev libdtkwidget-dev libddcutil-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build -j4
 QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
@@ -72,15 +73,15 @@ QT_QPA_PLATFORM=offscreen ./build/input-source-panel --quit-after 1500
 适用于已提供 DDE Dock 开发接口的 Debian/统信 UOS 环境。`debian/` 包含控制文件、debhelper 构建规则、变更记录、版权声明与原生源码包格式；测试使用离屏 Qt，不需要图形会话。
 
 ```bash
-sudo apt-get install build-essential debhelper cmake pkg-config qtbase5-dev dde-dock-dev libddcutil-dev
+sudo apt-get install build-essential debhelper cmake pkg-config qtbase5-dev dde-dock-dev libdtkwidget-dev libddcutil-dev
 dpkg-checkbuilddeps
 dpkg-buildpackage -us -uc -b -j4
 ```
 
-安装包生成在项目上一级目录，例如 `../dde-dock-input-source_0.1.3_amd64.deb`。运行依赖由 `dpkg-shlibdeps` 自动生成，包内包含任务栏插件、后台程序、独立调试面板和 AMD AUX 的 udev 规则。
+安装包生成在项目上一级目录，例如 `../dde-dock-input-source_0.1.4_amd64.deb`。运行依赖由 `dpkg-shlibdeps` 自动生成，包内包含任务栏插件、后台程序、独立调试面板和 AMD AUX 的 udev 规则。
 
 ```bash
-sudo apt-get install ../dde-dock-input-source_0.1.3_amd64.deb
+sudo apt-get install ../dde-dock-input-source_0.1.4_amd64.deb
 ```
 
 安装后重新打开任务栏会话以加载新版插件。需要构建源码包时使用 `dpkg-buildpackage -us -uc`；建议从干净的 Git 检出目录构建。

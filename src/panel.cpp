@@ -6,19 +6,19 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QListView>
-#include <QPainter>
 #include <QPointer>
 #include <QStyledItemDelegate>
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QSpinBox>
+#include <DBlurEffectWidget>
 
-// A combo popup is a separate window; the dock's translucent panel cannot
-// supply its background, and the default item view fills it with opaque Base.
+DWIDGET_USE_NAMESPACE
+
+// Use the same DTK behind-window blur as the dock's popup surface.
 class InputSourceComboBox : public QComboBox {
 public:
     InputSourceComboBox() {
-        // Keep a regular list popup; native menu scrollers paint an opaque base.
         setStyleSheet(QStringLiteral("QComboBox { combobox-popup: 0; }"));
         setAutoFillBackground(false);
         QPalette colors = palette();
@@ -26,62 +26,62 @@ public:
         setPalette(colors);
         auto *list = new QListView;
         setView(list);
-        // Avoid the platform menu delegate painting an opaque menu per item.
         setItemDelegate(new QStyledItemDelegate(list));
         view()->window()->setAttribute(Qt::WA_TranslucentBackground);
     }
     void showPopup() override {
         auto *list = view();
         auto *popup = list->window();
+        popup->setAttribute(Qt::WA_TranslucentBackground);
+        popup->setAutoFillBackground(false);
         if (m_popup != popup) {
             m_popup = popup;
             popup->installEventFilter(this);
+            m_blur = new DBlurEffectWidget(popup);
+            m_blur->setObjectName(QStringLiteral("inputSourcePopupBlur"));
+            m_blur->setAttribute(Qt::WA_TransparentForMouseEvents);
+            m_blur->setBlendMode(DBlurEffectWidget::BehindWindowBlend);
+            m_blur->setBlurRectXRadius(7);
+            m_blur->setBlurRectYRadius(7);
+            m_blur->setMaskColor(DBlurEffectWidget::AutoColor);
         }
         popup->setObjectName(QStringLiteral("inputSourceComboPopup"));
-        popup->setAttribute(Qt::WA_TranslucentBackground);
-        popup->setAutoFillBackground(false);
+        m_blur->setPalette(QApplication::palette());
+        m_blur->setGeometry(popup->rect());
+        m_blur->lower();
+        m_blur->show();
         list->setAutoFillBackground(false);
         list->viewport()->setAutoFillBackground(false);
         list->setFrameShape(QFrame::NoFrame);
-        const auto rgba = [](const QColor &color, int alpha) {
-            return QStringLiteral("rgba(%1, %2, %3, %4)")
-                .arg(color.red()).arg(color.green()).arg(color.blue()).arg(alpha);
-        };
-        // The combo stylesheet tints its own Window role; use the application
-        // surface palette so a light-theme popup does not become black.
         const QPalette colors = QApplication::palette();
-        m_background = colors.color(QPalette::Window);
-        m_background.setAlpha(210);
-        m_border = colors.color(QPalette::WindowText);
-        m_border.setAlpha(35);
-        const QString selected = rgba(colors.color(QPalette::Highlight), 200);
+        const QColor highlight = colors.color(QPalette::Highlight);
+        const QString selected = QStringLiteral("rgba(%1, %2, %3, 160)")
+            .arg(highlight.red()).arg(highlight.green()).arg(highlight.blue());
         popup->setStyleSheet(QStringLiteral(
             "QAbstractItemView { background: transparent; border: none; outline: 0; }"
             "QAbstractItemView::item { background: transparent; min-height: 26px; padding: 3px 8px; border-radius: 4px; }"
             "QAbstractItemView::item:selected, QAbstractItemView::item:hover { background: %1; color: %2; }"
         ).arg(selected, colors.color(QPalette::HighlightedText).name()));
         QComboBox::showPopup();
-        // Polish can enable viewport autofill; disable it again after show.
+        m_blur->setGeometry(popup->rect());
+        m_blur->lower();
         list->setAutoFillBackground(false);
         list->viewport()->setAutoFillBackground(false);
     }
 protected:
     bool eventFilter(QObject *object, QEvent *event) override {
-        if (object == m_popup && event->type() == QEvent::Paint) {
-            // Paint this separate popup surface once. Platform styles otherwise
-            // paint an opaque menu, or omit the background of a frameless popup.
-            QPainter painter(m_popup.data());
-            painter.setRenderHint(QPainter::Antialiasing);
-            painter.setPen(QPen(m_border, 1));
-            painter.setBrush(m_background);
-            painter.drawRoundedRect(QRectF(m_popup->rect()).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7);
-            return true;
+        if (object == m_popup) {
+            if (event->type() == QEvent::Resize && m_blur)
+                m_blur->setGeometry(m_popup->rect());
+            // The DTK background child paints the surface and requests the WM
+            // blur region. Suppress the native container's opaque menu paint.
+            if (event->type() == QEvent::Paint) return true;
         }
         return QComboBox::eventFilter(object, event);
     }
 private:
     QPointer<QWidget> m_popup;
-    QColor m_background, m_border;
+    QPointer<DBlurEffectWidget> m_blur;
 };
 
 static QLabel *label(const QString &text, QWidget *parent = nullptr)
@@ -145,6 +145,7 @@ Panel::Panel(Controller *controller, QWidget *parent) : QWidget(parent), m_contr
     connect(controller, &Controller::message, this, [this](const QString &text, bool error) {
         m_status->setText(text);
         m_status->setStyleSheet(error ? "color: #c44236;" : QString());
+        if (error && !m_controller->busy()) rebuild();
     });
     updateAppearance();
     rebuild();
@@ -181,11 +182,11 @@ void Panel::rebuild()
         if (!m.error.isEmpty()) layout->addWidget(label(m.error));
         if (m.controllable) {
             const bool manual = m_manual.contains(m.id);
-            auto *row = new QHBoxLayout;
             auto *combo = new InputSourceComboBox;
-            combo->setAccessibleName(m.name + QStringLiteral("的目标输入源"));
-            combo->addItem(QStringLiteral("选择输入源…"), -1);
+            combo->setAccessibleName(m.name + QStringLiteral("的输入源，选择后立即切换"));
+            if (m.current < 0) combo->addItem(QStringLiteral("当前输入源未知"), -1);
             QVector<int> values = m.sources;
+            if (m.current > 0 && !values.contains(m.current)) values.prepend(m.current);
             if (manual) for (int n : {1, 3, 4, 15, 16, 17, 18}) if (!values.contains(n)) values.append(n);
             for (int n : values) {
                 QString text = inputName(n);
@@ -194,23 +195,29 @@ void Panel::rebuild()
                 combo->addItem(text, n);
             }
             if (manual) combo->addItem(QStringLiteral("自定义 VCP 值…"), 0);
-            auto *button = new QPushButton(QStringLiteral("切换"));
-            button->setEnabled(false);
-            row->addWidget(combo, 1); row->addWidget(button);
-            layout->addLayout(row);
+            combo->setCurrentIndex(qMax(0, combo->findData(m.current)));
+            layout->addWidget(combo);
             auto *custom = new QSpinBox;
             custom->setRange(1, 255); custom->setDisplayIntegerBase(16); custom->setPrefix("0x");
             custom->setAccessibleName(QStringLiteral("自定义输入源的十六进制 VCP 值"));
-            custom->setValue(0x11); custom->hide(); layout->addWidget(custom);
+            custom->setToolTip(QStringLiteral("输入十六进制 VCP 值，按 Enter 切换"));
+            custom->setValue(m.current > 0 && m.current <= 255 ? m.current : 0x11);
+            custom->hide(); layout->addWidget(custom);
             connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), card,
-                    [combo, custom, button, m](int) {
+                    [combo, custom](int) { custom->setVisible(combo->currentData().toInt() == 0); });
+            // activated() only comes from user interaction; initial selection,
+            // theme updates and monitor refreshes must never write to hardware.
+            connect(combo, QOverload<int>::of(&QComboBox::activated), this,
+                    [this, combo, custom, m, manual](int) {
                 const int n = combo->currentData().toInt();
-                custom->setVisible(n == 0);
-                button->setEnabled(n >= 0 && n != m.current);
+                if (n == 0) { custom->setFocus(); custom->selectAll(); return; }
+                if (n > 0 && n != m.current) m_controller->switchSource(m.id, n, manual);
             });
-            connect(button, &QPushButton::clicked, this, [this, combo, custom, m, manual] {
-                const int n = combo->currentData().toInt();
-                m_controller->switchSource(m.id, n == 0 ? custom->value() : n, manual);
+            connect(custom, &QSpinBox::editingFinished, this, [this, combo, custom, m, manual] {
+                // Enter commits a custom value; focus loss while choosing a
+                // different item must not trigger an extra switch.
+                if (custom->hasFocus() && combo->currentData().toInt() == 0 && custom->value() != m.current)
+                    m_controller->switchSource(m.id, custom->value(), manual);
             });
             auto *advanced = new QCheckBox(QStringLiteral("手动模式（显示器未报告的输入源）"));
             advanced->setChecked(manual);

@@ -2,6 +2,8 @@
 #include "panel.h"
 #include <pluginsiteminterface.h>
 #include <QCheckBox>
+#include <QAbstractItemView>
+#include <DBlurEffectWidget>
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
@@ -130,20 +132,46 @@ private slots:
         QCOMPARE(controller.monitors().size(), 3);
         QSignalSpy messages(&controller, &Controller::message);
         auto combos = panel.findChildren<QComboBox *>(); QCOMPARE(combos.size(), 2);
-        auto *combo = combos.first(); combo->setCurrentIndex(combo->findData(17));
-        auto buttons = panel.findChildren<QPushButton *>();
-        QPushButton *switchButton = nullptr;
-        for (auto *button : buttons) if (button->text() == QStringLiteral("切换") && button->isEnabled()) { switchButton = button; break; }
-        QVERIFY(switchButton); QTest::mouseClick(switchButton, Qt::LeftButton);
+        QCOMPARE(combos[0]->currentData().toInt(), 15);
+        QCOMPARE(combos[1]->currentData().toInt(), 17);
+        for (auto *button : panel.findChildren<QPushButton *>()) QVERIFY(button->text() != QStringLiteral("切换"));
+        auto *combo = combos.first();
+        const int hdmi = combo->findData(17);
+        combo->setCurrentIndex(hdmi);
+        QCOMPARE(controller.monitors()[0].current, 15);
+        QCOMPARE(messages.count(), 0); // Programmatic selection never switches.
+        QVERIFY(QMetaObject::invokeMethod(combo, "activated", Qt::DirectConnection, Q_ARG(int, hdmi)));
         QCOMPARE(controller.monitors()[0].current, 17);
-        QVERIFY(messages.count() > 0);
         QCOMPARE(controller.monitors()[1].current, 17);
+        QCOMPARE(messages.count(), 1);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        combos = panel.findChildren<QComboBox *>(); QCOMPARE(combos.size(), 2);
+        combo = combos.first();
+        QCOMPARE(combo->currentData().toInt(), 17);
+        messages.clear();
+        QVERIFY(QMetaObject::invokeMethod(combo, "activated", Qt::DirectConnection, Q_ARG(int, combo->currentIndex())));
+        QCOMPARE(messages.count(), 0); // Selecting the current source is a no-op.
         controller.switchSource("demo-dp", 0x7f, false);
         QCOMPARE(controller.monitors()[0].current, 17);
         controller.switchSource("demo-dp", 0x7f, true);
         QCOMPARE(controller.monitors()[0].current, 0x7f);
         controller.switchSource("demo-internal", 17, true);
         QCOMPARE(controller.monitors()[2].current, -1);
+    }
+    void popupUsesDockBlur() {
+        Controller controller(true);
+        Panel panel(&controller); panel.show();
+        auto *combo = panel.findChildren<QComboBox *>().first();
+        QSignalSpy messages(&controller, &Controller::message);
+        combo->showPopup();
+        auto *blur = combo->view()->window()->findChild<Dtk::Widget::DBlurEffectWidget *>("inputSourcePopupBlur");
+        QVERIFY(blur);
+        QCOMPARE(blur->blendMode(), Dtk::Widget::DBlurEffectWidget::BehindWindowBlend);
+        QVERIFY(blur->blurEnabled());
+        QVERIFY(!combo->view()->viewport()->autoFillBackground());
+        combo->hidePopup();
+        QCOMPARE(controller.monitors()[0].current, 15);
+        QCOMPARE(messages.count(), 0);
     }
     void missingHelper() {
         const QByteArray previous = qgetenv("DDE_INPUT_SOURCE_HELPER");

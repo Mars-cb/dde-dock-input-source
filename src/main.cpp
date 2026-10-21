@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
     app.setApplicationName("input-source-panel");
-    app.setApplicationVersion("0.1.3");
+    app.setApplicationVersion("0.1.4");
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("DDE 显示器输入源插件调试面板"));
     parser.addHelpOption(); parser.addVersionOption();
@@ -31,7 +31,8 @@ int main(int argc, char **argv)
             if (combos.isEmpty()) { app.exit(2); return; }
             QComboBox *combo = combos.first();
             combo->showPopup();
-            QTimer::singleShot(200, &app, [combo, &app, path] {
+            QTextStream(stdout) << "popup-window-id=" << quintptr(combo->view()->window()->winId()) << '\n' << flush;
+            QTimer::singleShot(1000, &app, [combo, &app, path] {
                 const bool saved = combo->view()->window()->grab().save(path);
                 combo->hidePopup();
                 app.exit(saved ? 0 : 1);
