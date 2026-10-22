@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "displaywatcher.h"
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -10,10 +11,15 @@ Controller::Controller(bool demo, QObject *parent) : QObject(parent), m_demo(dem
 {
     m_timeout.setSingleShot(true);
     m_hotplug.setSingleShot(true);
-    m_hotplug.setInterval(700);
     connect(&m_hotplug, &QTimer::timeout, this, &Controller::refresh);
-    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { m_hotplug.start(); });
-    connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { m_hotplug.start(); });
+    // Explicit interval: switching uses a longer delay on this same timer.
+    const auto scheduleRefresh = [this] { m_hotplug.start(700); };
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, scheduleRefresh);
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this, scheduleRefresh);
+    if (!m_demo) {
+        auto *watcher = new DisplayWatcher(this);
+        connect(watcher, &DisplayWatcher::changed, this, scheduleRefresh);
+    }
     connect(&m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &Controller::finish);
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart)
@@ -46,8 +52,13 @@ void Controller::addDesktopScreens()
         m_monitors.append(m);
     }
 }
+void Controller::initialize()
+{
+    if (!m_initialized) refresh();
+}
 void Controller::refresh()
 {
+    m_initialized = true;
     if (m_busy) { m_refreshPending = true; return; }
     if (m_demo) {
         m_monitors.clear();

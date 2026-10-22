@@ -1,3 +1,11 @@
+dde-dock-input-source (0.1.5) unstable; urgency=medium
+
+  * Cache monitor information instead of scanning on each panel opening.
+  * Listen for DRM hotplug events as well as Qt desktop screen changes.
+  * Coalesce connection events and preserve manual and post-switch refreshes.
+
+ -- Input Source Plugin Contributors <noreply@example.invalid>  Thu, 22 Oct 2026 10:13:08 +0800
+
 dde-dock-input-source (0.1.4) unstable; urgency=medium
 
   * Use DTK behind-window blur for input source popup backgrounds.

@@ -9,7 +9,6 @@
 #include <QPointer>
 #include <QStyledItemDelegate>
 #include <QScrollArea>
-#include <QShowEvent>
 #include <QSpinBox>
 #include <DBlurEffectWidget>
 
@@ -149,11 +148,9 @@ Panel::Panel(Controller *controller, QWidget *parent) : QWidget(parent), m_contr
     });
     updateAppearance();
     rebuild();
-}
-void Panel::showEvent(QShowEvent *event)
-{
-    QWidget::showEvent(event);
-    m_controller->refresh();
+    m_controller->initialize();
+    m_refresh->setEnabled(!m_controller->busy());
+    m_refresh->setText(m_controller->busy() ? QStringLiteral("处理中…") : QStringLiteral("刷新"));
 }
 void Panel::rebuild()
 {

@@ -13,6 +13,7 @@ public:
     bool busy() const { return m_busy; }
     bool demo() const { return m_demo; }
 public slots:
+    void initialize();
     void refresh();
     void switchSource(const QString &id, int value, bool manual = false);
 signals:
@@ -28,5 +29,5 @@ private:
     QProcess m_process;
     QTimer m_timeout, m_hotplug;
     bool m_busy = false, m_demo = false, m_switching = false, m_timedOut = false;
-    bool m_refreshPending = false;
+    bool m_refreshPending = false, m_initialized = false;
 };

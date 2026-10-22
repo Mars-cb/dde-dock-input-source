@@ -11,7 +11,6 @@ class Panel : public QWidget {
 public:
     explicit Panel(Controller *controller, QWidget *parent = nullptr);
 protected:
-    void showEvent(QShowEvent *event) override;
     void changeEvent(QEvent *event) override;
 private:
     void rebuild();

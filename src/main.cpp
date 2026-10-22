@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
     app.setApplicationName("input-source-panel");
-    app.setApplicationVersion("0.1.4");
+    app.setApplicationVersion("0.1.5");
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("DDE 显示器输入源插件调试面板"));
     parser.addHelpOption(); parser.addVersionOption();

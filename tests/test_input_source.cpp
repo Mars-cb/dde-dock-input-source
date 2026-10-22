@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "displaywatcher.h"
 #include "panel.h"
 #include <pluginsiteminterface.h>
 #include <QCheckBox>
@@ -16,6 +17,18 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+class HelperOverride {
+public:
+    explicit HelperOverride(const QString &path) : previous(qgetenv("DDE_INPUT_SOURCE_HELPER")) {
+        qputenv("DDE_INPUT_SOURCE_HELPER", path.toUtf8());
+    }
+    ~HelperOverride() {
+        if (previous.isNull()) qunsetenv("DDE_INPUT_SOURCE_HELPER");
+        else qputenv("DDE_INPUT_SOURCE_HELPER", previous);
+    }
+private:
+    QByteArray previous;
+};
 class FakeProxy : public PluginProxyInterface {
 public:
     int added = 0, removed = 0;
@@ -158,6 +171,59 @@ private slots:
         controller.switchSource("demo-internal", 17, true);
         QCOMPARE(controller.monitors()[2].current, -1);
     }
+    void panelReusesCachedSources() {
+        Controller controller(true);
+        {
+            Panel panel(&controller); panel.show();
+            controller.switchSource("demo-dp", 17);
+            QSignalSpy changed(&controller, &Controller::changed);
+            QSignalSpy messages(&controller, &Controller::message);
+            panel.hide(); panel.show();
+            QCoreApplication::processEvents();
+            QCOMPARE(controller.monitors()[0].current, 17);
+            QCOMPARE(changed.count(), 0);
+            QCOMPARE(messages.count(), 0);
+        }
+        // Recreating the view must also reuse the controller's cached state.
+        Panel replacement(&controller); replacement.show();
+        QCOMPARE(controller.monitors()[0].current, 17);
+        QPushButton *refresh = nullptr;
+        for (auto *button : replacement.findChildren<QPushButton *>())
+            if (button->text() == QStringLiteral("刷新")) refresh = button;
+        QVERIFY(refresh);
+        refresh->click();
+        QCOMPARE(controller.monitors()[0].current, 15);
+    }
+    void hotplugRefreshesHiddenPanelAndQueuesWhileBusy() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString path = temp.path() + "/helper";
+        QFile helper(path); QVERIFY(helper.open(QIODevice::WriteOnly));
+        helper.write("#!/bin/sh\necho scan >> \"$0.calls\"\nsleep 1\nprintf '%s\\n' '{\"ok\":true,\"monitors\":[]}'\n");
+        helper.close();
+        QVERIFY(helper.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        HelperOverride override(path);
+        Controller controller;
+        Panel panel(&controller); panel.show(); panel.hide();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 4000);
+        auto *watcher = controller.findChild<DisplayWatcher *>(); QVERIFY(watcher);
+        QSignalSpy busy(&controller, &Controller::busyChanged);
+        // A burst of connection events produces one scan while the view is hidden.
+        for (int i = 0; i < 4; ++i)
+            QVERIFY(QMetaObject::invokeMethod(watcher, "changed", Qt::DirectConnection));
+        QTRY_VERIFY(controller.busy());
+        QCOMPARE(busy.count(), 1);
+        // Another burst during that scan must be remembered and coalesced.
+        for (int i = 0; i < 4; ++i)
+            QVERIFY(QMetaObject::invokeMethod(watcher, "changed", Qt::DirectConnection));
+        QTRY_VERIFY_WITH_TIMEOUT(busy.count() == 4 && !controller.busy(), 5000);
+        QTest::qWait(800);
+        QCOMPARE(busy.count(), 4);
+        QFile calls(path + ".calls"); QVERIFY(calls.open(QIODevice::ReadOnly));
+        QCOMPARE(calls.readAll(), QByteArray("scan\nscan\nscan\n"));
+        panel.show(); QCoreApplication::processEvents();
+        QCOMPARE(busy.count(), 4);
+        QVERIFY(!controller.busy());
+    }
     void popupUsesDockBlur() {
         Controller controller(true);
         Panel panel(&controller); panel.show();
@@ -219,6 +285,7 @@ private slots:
         QVERIFY(response.value("error").toString().contains(QStringLiteral("无效")));
     }
     void pluginLifecycle() {
+        HelperOverride override("/nonexistent/input-source-helper");
         FakeProxy proxy;
         QPluginLoader loader(QString::fromUtf8(TEST_PLUGIN_PATH));
         QObject *instance = loader.instance();
